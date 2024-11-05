@@ -1,15 +1,18 @@
-#include "raylib.h"
+#include "C:\raylib\raylib\src\raylib.h"
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
+#include <thread>
 #include "hermione.h"
 
 Hermione hermione; // Create Hermione object
 bool gameWon = false; // Flag to track if the game is won
+bool gameOver = false; // Flag to track if the game is over
 const int numrows = 20; // Number of rows
 const int ncols = 36; // Number of columns
 const int cellSize = 35; // Size of each cell
-const int numGhosts = 5; // Number of ghosts
+const int numGhosts = 6; // Number of ghosts
 
 // Cell structure definition
 struct Cell {
@@ -25,13 +28,11 @@ struct Player {
     Texture2D texture; // Player texture
 };
 
-
 // Ghost structure definition
 struct Ghost {
     int r, c; // Ghost's row and column position
     Texture2D texture; // Ghost texture
 };
-
 
 // Global variables
 std::vector<Cell> grid(numrows * ncols);
@@ -47,15 +48,11 @@ Music music; // Music stream
 bool isColliding = false; // Track if the player has collided
 float collisionTime = 0.0f; // Timer for how long to pause the music
 
-// Function declarations
-void InitGrid();
-void DrawMaze();
-void MazeGenerator();
-void UpdatePlayer();
-void InitGhosts();
-void UpdateGhosts();
-void DrawLevel2();
-void UpdateLevel2();
+// Timer variables
+auto startTime = std::chrono::steady_clock::now();
+auto endTime = startTime + std::chrono::minutes(6);
+
+
 // Function to initialize the grid
 void InitGrid() {
     for (int r = 0; r < numrows; r++) {
@@ -112,7 +109,6 @@ void DrawMaze() {
     }
 }
 
-
 void MazeGenerator() {
     if (!current->visited) {
         current->visited = true;
@@ -166,13 +162,14 @@ void UpdatePlayer() {
         player.r++;
     }
     if (IsKeyDown(KEY_LEFT) && !grid[player.r * ncols + player.c].walls[3]) { // Left
-        player.c--;}
-        // Check for collision with Hermione
-        if (player.r == hermione.r && player.c == hermione.c) { // Update this line to check against Hermione's position
-            gameWon = true; // Set the win flag
-        }
-    
+        player.c--;
+    }
+    // Check for collision with Hermione
+    if (player.r == hermione.r && player.c == hermione.c) { // Update this line to check against Hermione's position
+        gameWon = true; // Set the win flag
+    }
 }
+
 // Function to initialize ghosts
 void InitGhosts() {
     for (int i = 0; i < numGhosts; i++) {
@@ -221,6 +218,24 @@ void UpdateGhosts() {
     }
 }
 
+// Function to draw the remaining time
+void DrawRemainingTime() {
+    auto now = std::chrono::steady_clock::now();
+    auto remaining = std::chrono::duration_cast<std::chrono::seconds>(endTime - now).count();
+
+    if (remaining <= 0) {
+        gameOver = true;
+        remaining = 0;
+    }
+
+  DrawText(TextFormat("Time remaining: %02d:%02d", remaining / 60, remaining % 60), 
+         GetScreenWidth() / 2 - MeasureText(TextFormat("Time remaining: %02d:%02d", remaining / 60, remaining % 60), 20) / 2, 
+         20, 
+         20, 
+         RED);
+
+}
+
 // UPDATE level 2 function, including all elements
 void UpdateLevel2() {
     static bool initialized = false; // Static variable to track initialization
@@ -246,11 +261,14 @@ void UpdateLevel2() {
 
         initialized = true; // Set initialization flag to true
     }
-     if (!play) {
+
+    if (!play) {
         MazeGenerator(); // Continue generating the maze until complete
     } else {
-        UpdatePlayer(); // Update player position once the maze is generated
-        UpdateGhosts(); // Update ghosts
+        if (!gameOver && !gameWon) {
+            UpdatePlayer(); // Update player position once the maze is generated
+            UpdateGhosts(); // Update ghosts
+        }
     }
 
     // Update the music stream
@@ -264,20 +282,24 @@ void UpdateLevel2() {
             isColliding = false; // Reset collision flag
         }
     }
-
 }
 
 // DRAW level 2 function
 void DrawLevel2() {
-     
-
     ClearBackground(RAYWHITE); // Clear the screen
     DrawMaze(); // Draw the maze
     DrawHermione(hermione, cellSize); // Draw Hermione
+
+    // Draw the remaining time
+    DrawRemainingTime();
 
     // If the game is won, display the "You Win!" message
     if (gameWon) {
         DrawText("You Win!", ncols * cellSize / 2 - MeasureText("You Win!", 20) / 2, numrows * cellSize / 2 - 10, 20, GREEN);
     }
-  
+
+    // If the game is over, display the "Game Over" message
+    if (gameOver) {
+        DrawText("Game Over!", ncols * cellSize / 2 - MeasureText("Game Over!", 20) / 2, numrows * cellSize / 2 - 10, 20, RED);
+    }
 }
