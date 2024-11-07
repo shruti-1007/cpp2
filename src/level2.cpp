@@ -1,10 +1,12 @@
 #include "C:\raylib\raylib\src\raylib.h"
 #include <vector>
 #include <cstdlib>
+#include <string>
 #include <ctime>
 #include <chrono>
 #include <thread>
 #include "hermione.h"
+#include "globals.h"
 
 Hermione hermione; // Create Hermione object
 bool gameWon = false; // Flag to track if the game is won
@@ -12,7 +14,11 @@ bool gameOver = false; // Flag to track if the game is over
 const int numrows = 20; // Number of rows
 const int ncols = 36; // Number of columns
 const int cellSize = 35; // Size of each cell
-const int numGhosts = 6; // Number of ghosts
+const int numGhosts = 10; // Number of ghosts
+const int numCoinss = 25;
+float collisionCooldown = 0.0f; // Cooldown for collision
+int coinsCollected = 0; // Counter for collected coins
+
 
 // Cell structure definition
 struct Cell {
@@ -33,6 +39,10 @@ struct Ghost {
     int r, c; // Ghost's row and column position
     Texture2D texture; // Ghost texture
 };
+struct Coin{
+    int r, c; // Coin's row and column position
+    Texture2D texture; // Coin texture
+};
 
 // Global variables
 std::vector<Cell> grid(numrows * ncols);
@@ -41,12 +51,13 @@ std::vector<Cell*> stack;
 bool play = false;
 Player player = { 0, 0 }; // Initialize player at the starting position
 std::vector<Ghost> ghosts; // List of ghosts
+std::vector<Coin> coins; // List of coins
 Sound collide; // Collision sound
 Music music; // Music stream
 
 // Collision management variables
 bool isColliding = false; // Track if the player has collided
-float collisionTime = 0.0f; // Timer for how long to pause the music
+float collisionTime = 5.0f; // Timer for how long to pause the music
 
 // Timer variables
 auto startTime = std::chrono::steady_clock::now();
@@ -107,6 +118,18 @@ void DrawMaze() {
                               ghostFrameY + (cellSize - ghost.texture.height * ghostScale) / 2},
                       0.0f, ghostScale, WHITE); // Draw the ghost texture
     }
+    //  Draw coins inside a frame
+    float coinScale = 0.09f; // Scale coins to 8% of original size
+    for (const Coin& coin : coins) {
+        int coinFrameX = coin.c * cellSize;
+        int coinFrameY = coin.r * cellSize;
+        DrawRectangle(coinFrameX, coinFrameY, cellSize - 1, cellSize - 1, DARKGRAY); // Frame background
+
+        DrawTextureEx(coin.texture,
+                      Vector2{coinFrameX + (cellSize - coin.texture.width * coinScale) / 2,
+                              coinFrameY + (cellSize - coin.texture.height * coinScale) / 2},
+                      0.0f, coinScale, DARKGRAY); // Draw the coin texture
+    }
 }
 
 void MazeGenerator() {
@@ -164,12 +187,22 @@ void UpdatePlayer() {
     if (IsKeyDown(KEY_LEFT) && !grid[player.r * ncols + player.c].walls[3]) { // Left
         player.c--;
     }
+
     // Check for collision with Hermione
-    if (player.r == hermione.r && player.c == hermione.c) { // Update this line to check against Hermione's position
+    if (player.r == hermione.r && player.c == hermione.c) {
         gameWon = true; // Set the win flag
     }
-}
 
+    // Check for collision with coins
+    for (auto it = coins.begin(); it != coins.end(); ) {
+        if (player.r == it->r && player.c == it->c) {
+            coinsCollected++; // Increment the coin counter
+            it = coins.erase(it); // Remove the collected coin
+        } else {
+            ++it;
+        }
+    }
+}
 // Function to initialize ghosts
 void InitGhosts() {
     for (int i = 0; i < numGhosts; i++) {
@@ -180,10 +213,22 @@ void InitGhosts() {
         ghosts.push_back(ghost);
     }
 }
+void InitCoins() {
+    for (int i = 0; i < numCoinss; i++) {
+        Coin coin;
+        coin.r = std::rand() % numrows;
+        coin.c = std::rand() % ncols;
+        coin.texture = LoadTexture("./images/coin.png"); // Load coin texture
+        coins.push_back(coin);
+    }
+}  
+
 
 // Function to update ghosts
+// Function to update ghosts
 void UpdateGhosts() {
-    for (Ghost& ghost : ghosts) {
+    for (auto it = ghosts.begin(); it != ghosts.end(); ) {
+        Ghost& ghost = *it;
         int direction = std::rand() % 4; // Random direction: 0 = up, 1 = right, 2 = down, 3 = left
 
         int newR = ghost.r;
@@ -205,18 +250,33 @@ void UpdateGhosts() {
 
         // Check for collision with player
         if (ghost.r == player.r && ghost.c == player.c) {
-            // Reset player to initial position
-            PlaySound(collide); // Play collision sound
-            player.r = 0;
-            player.c = 0;
+            // If there are collectibles, remove the collided ghost
+            if (CollectibleCount > 0) {
+                PlaySound(collide); // Play collision sound
+                --CollectibleCount; // Decrease the collectibles count
+                it = ghosts.erase(it); // Remove the collided ghost
+                // Optionally, you can add a sound or effect here for ghost removal
+            } else {
+                // If no collectibles, reset player to initial position
+                PlaySound(collide); // Play collision sound
+                player.r = 0;
+                player.c = 0;
 
-            // Stop the music and set collision flag
-            StopMusicStream(music);
-            isColliding = true;
-            collisionTime = 3.0f; // Set collision duration (3 second)
+                // Stop the music and set collision flag
+                StopMusicStream(music);
+                isColliding = true;
+                collisionTime = 3.0f; // Set collision duration (3 seconds)
+                ++it; // Continue to the next ghost after handling collision
+            }
+        } else {
+            ++it; // Continue to the next ghost if no collision
         }
     }
 }
+
+
+        
+
 
 // Function to draw the remaining time
 void DrawRemainingTime() {
@@ -233,6 +293,9 @@ void DrawRemainingTime() {
          20, 
          20, 
          RED);
+         //coins collected
+          DrawText(TextFormat("Coins Collected: %d", coinsCollected), 
+             GetScreenWidth() - 200, 20, 20, GOLD);
 
 }
 
@@ -256,8 +319,8 @@ void UpdateLevel2() {
         hermione.texture = LoadTexture("./images/hermione.png");
         hermione.r = numrows - 1; // Set Hermione's position to the last row
         hermione.c = ncols - 1; // Set Hermione's position to the last column
-
-        InitGhosts(); // Initialize ghosts
+       InitGhosts(); // Initialize ghosts
+        InitCoins(); // Initialize coins
 
         initialized = true; // Set initialization flag to true
     }
@@ -292,6 +355,9 @@ void DrawLevel2() {
 
     // Draw the remaining time
     DrawRemainingTime();
+    // Display remaining collectibles
+    std::string collectibleText = "Collectibles Remaining: " + std::to_string(CollectibleCount);
+    DrawText(collectibleText.c_str(), 10, 10, 20, BLUE); // Adjust position and color as needed
 
     // If the game is won, display the "You Win!" message
     if (gameWon) {
