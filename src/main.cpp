@@ -3,11 +3,13 @@
 #include "menu.h"
 #include "level1.h"
 #include "level2.h"
+#include "level3.h"
 #include "gameover.h"
 #include "collectibles.h"
 #include "character.h"
-#include "Pause.h"
+#include "Pause1.h"
 #include "globals.h"
+#include "Pause2.h"
 
 using namespace std;
 
@@ -20,25 +22,27 @@ enum GameState
     MAP,
     LEVEL1,
     LEVEL2,
+    LEVEL3,
     GAMEOVER,
-    PAUSE
+    PAUSE1,
+    PAUSE2,
 };
 
 Collectibles collectible;
 
 int main()
 {
-    InitWindow(1260, 700, "Wizardry");//changed size of window
+    InitWindow(1260, 700, "Wizardry"); // changed size of window
     SetTargetFPS(60);
     cout << "Window Initialized" << endl;
-    Texture2D backgroundlevel1 = LoadTexture("./images/bg1.png");
+    Texture2D backgroundlevel1 = LoadTexture("./images/level1bg.png");
     float startTime = 0.0f;
     float elapsedTime = 0.0f;
-    float endTime = 90.0f;
+    float endTime = 60.0f;
     float RemainingTime = 0.0f;
 
-    Color OLIVE_GREEN = {107, 142, 35, 255};
-    // Current state of the game
+    // Color OLIVE_GREEN = {107, 142, 35, 255};
+    //  Current state of the game
     GameState currentState = MENU;
     Collectibles collectible;
     Texture2D currentMapImage = {0};
@@ -60,23 +64,22 @@ int main()
 
     // Load map and highlighted images
     Texture2D mapImage = LoadTexture("./images/mapimg.png");
-    Texture2D hogsmeadehovered = LoadTexture("./images/hogsmeadehovered.png");
+    Texture2D quidditchhovered = LoadTexture("./images/quidditchhovered.png");
     Texture2D forbiddenhovered = LoadTexture("./images/forbiddenhovered.png");
     Texture2D mainbuildinghovered = LoadTexture("./images/mainbuildinghovered.png");
 
     // defining areas for each level
-   // Defining areas for each level adjusted for a window size of 1260 x 700
-Rectangle hogsmeadeArea = {90, 155, 180, 117};       // Hogsmeade area
-Rectangle forbiddenArea = {1080, 232, 180, 117};     // Forbidden area
-Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
-
+    // Defining areas for each level adjusted for a window size of 1260 x 700
+    Rectangle quidditchArea = {500, 300, 180, 117};    // Hogsmeade area
+    Rectangle forbiddenArea = {1080, 232, 180, 117};   // Forbidden area
+    Rectangle mainbuildingArea = {720, 466, 270, 233}; // Main building area
 
     while (!WindowShouldClose())
     {
         elapsedTime = GetTime() - startTime;
         RemainingTime = endTime - elapsedTime;
         Vector2 mousePosition = GetMousePosition();
-        bool isHoveringHogsmeade = CheckCollisionPointRec(mousePosition, hogsmeadeArea);
+        bool isHoveringQuidditch = CheckCollisionPointRec(mousePosition, quidditchArea);
         bool isHoveringForbiddenForest = CheckCollisionPointRec(mousePosition, forbiddenArea);
         bool isHoveringMainBuilding = CheckCollisionPointRec(mousePosition, mainbuildingArea);
 
@@ -92,9 +95,9 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
             break;
 
         case MAP:
-            if (isHoveringHogsmeade)
+            if (isHoveringQuidditch)
             {
-                currentMapImage = hogsmeadehovered;
+                currentMapImage = quidditchhovered;
             }
             else if (isHoveringForbiddenForest)
             {
@@ -108,7 +111,7 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
             {
                 currentMapImage = mapImage;
             }
-            if (isHoveringHogsmeade && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            if (isHoveringQuidditch && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
             {
                 currentState = LEVEL1;
                 startTime = GetTime();
@@ -128,11 +131,11 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
 
         case LEVEL1:
             UpdateLevel1();
-            collectible.UpdateBludgers();
+            // collectible.UpdateBludgers();
             if (RemainingTime <= 0) /* time up*/
             {
                 RemainingTime = 0;
-                currentState = PAUSE;
+                currentState = PAUSE1;
             }
             if (IsKeyDown(KEY_L))
             {
@@ -142,11 +145,26 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
 
         case LEVEL2:
             UpdateLevel2();
-            if (IsKeyDown(KEY_W)) /* condition for winning */
+            if (gameWon) /* condition for winning */
+            {
+                currentState = PAUSE2; // Game over after winning
+            }
+            else if (gameOver) /* condition for losing */
+            {
+                currentState = GAMEOVER; // Game over after losing
+            }
+            if (IsKeyDown(KEY_L))
+            {
+                currentState = LEVEL3;
+            }
+            break;
+        case LEVEL3:
+            UpdateLevel3();
+             if (IsKeyDown(KEY_V)) /* condition for winning */
             {
                 currentState = GAMEOVER; // Game over after winning
             }
-            else if (IsKeyDown(KEY_W)) /* condition for losing */
+            else if (IsKeyDown(KEY_V)) /* condition for losing */
             {
                 currentState = GAMEOVER; // Game over after losing
             }
@@ -160,14 +178,21 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
             }
             break;
 
-        case PAUSE:
-            UpdatePause();
+        case PAUSE1:
+            UpdatePause1();
             if (IsKeyPressed(KEY_P))
             {
                 currentState = LEVEL2; // Move to the next level
             }
             break;
-        }
+        
+        case PAUSE2:
+             UpdatePause2();
+             if (IsKeyPressed(KEY_L)){
+                currentState =LEVEL3;
+             }
+             break;
+    }
         // Update cloud positions
         for (int i = 0; i < numClouds; i++)
         {
@@ -202,7 +227,13 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
             // collectible.Draw(texture);
             DrawLevel1();
             DrawCollectible(texture);
-            DrawBludgers(bludgerTexture);
+
+            for (int i = 0; i < 3; i++)
+            {
+
+                collectible.UpdateBludgers(i);
+                collectible.DrawBludgers(i, bludgerTexture);
+            };
 
             // Draw clouds
             for (int i = 0; i < numClouds; i++)
@@ -211,20 +242,26 @@ Rectangle mainbuildingArea = {720, 466, 270, 233};    // Main building area
             }
             RemainingTime = endTime - elapsedTime;
             // Draw Timer
-            DrawText(TextFormat("Remaining Time: %.2f", RemainingTime), 510, 30, 40, OLIVE_GREEN);
+            DrawText(TextFormat("Remaining Time: \n %.2f", RemainingTime), 1052, 49, 19, darkGreen); // syntax: DrawText(const char *text, int posX, int posY, int fontSize, Color color)
             break;
 
         case LEVEL2:
             ClearBackground(darkGreen);
             DrawLevel2();
             break;
-
+        case LEVEL3:
+            ClearBackground(darkGreen);
+            DrawLevel3();
+            break;
         case GAMEOVER:
             DrawGameOver();
             break;
 
-        case PAUSE:
-            DrawPause();
+        case PAUSE1:
+            DrawPause1();
+            break;
+         case PAUSE2:
+            DrawPause2();
             break;
         }
 
