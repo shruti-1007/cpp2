@@ -9,15 +9,14 @@
 #include "globals.h"
 
 Hermione hermione; // Create Hermione object
-bool gameWon = false; // Flag to track if the game is won
-bool gameOver = false; // Flag to track if the game is over
 const int numrows = 20; // Number of rows
 const int ncols = 36; // Number of columns
 const int cellSize = 35; // Size of each cell
 const int numGhosts = 10; // Number of ghosts
 const int numCoinss = 25;
-float collisionCooldown = 0.0f; // Cooldown for collision
-int coinsCollected = 0; // Counter for collected coins
+int coinsCollected = 0;
+bool gameOver=false;
+bool gameWon=false;
 
 
 // Cell structure definition
@@ -274,7 +273,16 @@ void UpdateGhosts() {
     }
 }
 
-
+// void UnloadLevel2(){
+//     UnloadTexture(player.texture);
+//     UnloadTexture(hermione.texture);
+//     for (const Ghost& ghost : ghosts) {
+//         UnloadTexture(ghost.texture);
+//     }
+//     for (const Coin& coin : coins) {
+//         UnloadTexture(coin.texture);
+//     }
+// }
         
 
 
@@ -359,13 +367,5 @@ void DrawLevel2() {
     std::string collectibleText = "Collectibles Remaining: " + std::to_string(CollectibleCount);
     DrawText(collectibleText.c_str(), 10, 10, 20, BLUE); // Adjust position and color as needed
 
-    // If the game is won, display the "You Win!" message
-    if (gameWon) {
-        DrawText("You Win!", ncols * cellSize / 2 - MeasureText("You Win!", 20) / 2, numrows * cellSize / 2 - 10, 20, GREEN);
-    }
-
-    // If the game is over, display the "Game Over" message
-    if (gameOver) {
-        DrawText("Game Over!", ncols * cellSize / 2 - MeasureText("Game Over!", 20) / 2, numrows * cellSize / 2 - 10, 20, RED);
-    }
+    
 }
