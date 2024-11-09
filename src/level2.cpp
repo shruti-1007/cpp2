@@ -234,6 +234,7 @@ void UpdatePlayer()
         if (player.r == it->r && player.c == it->c)
         {
             coinsCollected++;     // Increment the coin counter
+            PlaySound(coincollected); //coin collection sound
             it = coins.erase(it); // Remove the collected coin
         }
         else
