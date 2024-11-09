@@ -9,14 +9,16 @@
 #include "globals.h"
 
 Hermione hermione; // Create Hermione object
+bool gameWon = false; // Flag to track if the game is won
+bool gameOver = false; // Flag to track if the game is over
 const int numrows = 20; // Number of rows
 const int ncols = 36; // Number of columns
 const int cellSize = 35; // Size of each cell
 const int numGhosts = 10; // Number of ghosts
-const int numCoinss = 25;
-int coinsCollected = 0;
-bool gameOver=false;
-bool gameWon=false;
+const int numCoinss = 35;
+int coinsCollected = 0; // Counter for collected coins
+float blastDisplayTime = 0.0f; // Timer for blast display duration
+const float blastDuration = 1.0f; // Duration to display the blast (in seconds)
 
 
 // Cell structure definition
@@ -32,6 +34,15 @@ struct Player {
     int r, c; // Player's row and column position
     Texture2D texture; // Player texture
 };
+
+
+// Blast structure definition
+struct Blast {
+    int r, c; // Blast's row and column position
+    Texture2D texture; // Blast texture
+};
+// Blast object
+Blast blast={-1, -1}; 
 
 // Ghost structure definition
 struct Ghost {
@@ -52,8 +63,11 @@ Player player = { 0, 0 }; // Initialize player at the starting position
 std::vector<Ghost> ghosts; // List of ghosts
 std::vector<Coin> coins; // List of coins
 Sound collide; // Collision sound
+Sound attack; // Attack sound
+Sound coincollected; // Coin collection sound
 Music music; // Music stream
-
+Sound gameover; // Game over sound
+Sound win; // Win sound
 // Collision management variables
 bool isColliding = false; // Track if the player has collided
 float collisionTime = 5.0f; // Timer for how long to pause the music
@@ -97,6 +111,10 @@ void DrawMaze() {
     int playerFrameX = player.c * cellSize; // X position of the player's frame
     int playerFrameY = player.r * cellSize; // Y position of the player's frame
     DrawRectangle(playerFrameX, playerFrameY, cellSize - 1, cellSize - 1, DARKGRAY); // Frame background
+    //Draw the blast inside frame
+    int blastFrameX = blast.c * cellSize; // X position of the player's frame
+    int blastFrameY = blast.r * cellSize; // Y position of the player's frame
+    DrawRectangle(blastFrameX, blastFrameY, cellSize - 1, cellSize - 1, DARKGRAY); // Frame background
 
     // Draw the player texture (scaled)
     float playerScale = 0.1f; // Scale the player texture to 5% of original size
@@ -104,6 +122,18 @@ void DrawMaze() {
                   Vector2{playerFrameX + (cellSize - player.texture.width * playerScale) / 2,
                           playerFrameY + (cellSize - player.texture.height * playerScale) / 2},
                   0.0f, playerScale, WHITE);
+    // Draw the blast texture if it's within the grid
+    if (blast.r >= 0 && blast.c >= 0) {
+        int blastFrameX = blast.c * cellSize; // X position of the blast's frame
+        int blastFrameY = blast.r * cellSize; // Y position of the blast's frame
+        DrawRectangle(blastFrameX, blastFrameY, cellSize - 1, cellSize - 1, DARKGRAY); // Frame background
+
+        float blastScale = 0.1f; // Scale the blast texture to 5% of original size
+        DrawTextureEx(blast.texture,
+                      Vector2{blastFrameX + (cellSize - blast.texture.width * blastScale) / 2,
+                              blastFrameY + (cellSize - blast.texture.height * blastScale) / 2},
+                      0.0f, blastScale, WHITE);
+    }
 
     // Draw ghosts inside a frame
     float ghostScale = 0.05f; // Scale ghosts to 8% of original size
@@ -172,32 +202,42 @@ void MazeGenerator() {
     }
 }
 
-void UpdatePlayer() {
+void UpdatePlayer()
+{
     // Check for player movement
-    if (IsKeyDown(KEY_UP) && !grid[player.r * ncols + player.c].walls[0]) { // Up
+    if ((IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) && !grid[player.r * ncols + player.c].walls[0])
+    { // Up
         player.r--;
     }
-    if (IsKeyDown(KEY_RIGHT) && !grid[player.r * ncols + player.c].walls[1]) { // Right
+    if ((IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) && !grid[player.r * ncols + player.c].walls[1])
+    { // Right
         player.c++;
     }
-    if (IsKeyDown(KEY_DOWN) && !grid[player.r * ncols + player.c].walls[2]) { // Down
+    if ((IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) && !grid[player.r * ncols + player.c].walls[2])
+    { // Down
         player.r++;
     }
-    if (IsKeyDown(KEY_LEFT) && !grid[player.r * ncols + player.c].walls[3]) { // Left
+    if ((IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) && !grid[player.r * ncols + player.c].walls[3])
+    { // Left
         player.c--;
     }
 
     // Check for collision with Hermione
-    if (player.r == hermione.r && player.c == hermione.c) {
+    if (player.r == hermione.r && player.c == hermione.c)
+    {
         gameWon = true; // Set the win flag
     }
 
     // Check for collision with coins
-    for (auto it = coins.begin(); it != coins.end(); ) {
-        if (player.r == it->r && player.c == it->c) {
-            coinsCollected++; // Increment the coin counter
+    for (auto it = coins.begin(); it != coins.end();)
+    {
+        if (player.r == it->r && player.c == it->c)
+        {
+            coinsCollected++;     // Increment the coin counter
             it = coins.erase(it); // Remove the collected coin
-        } else {
+        }
+        else
+        {
             ++it;
         }
     }
@@ -251,7 +291,9 @@ void UpdateGhosts() {
         if (ghost.r == player.r && ghost.c == player.c) {
             // If there are collectibles, remove the collided ghost
             if (CollectibleCount > 0) {
-                PlaySound(collide); // Play collision sound
+                blast.r = ghost.r;
+                blast.c = ghost.c;
+                PlaySound(attack); // Play collision sound
                 --CollectibleCount; // Decrease the collectibles count
                 it = ghosts.erase(it); // Remove the collided ghost
                 // Optionally, you can add a sound or effect here for ghost removal
@@ -273,16 +315,7 @@ void UpdateGhosts() {
     }
 }
 
-// void UnloadLevel2(){
-//     UnloadTexture(player.texture);
-//     UnloadTexture(hermione.texture);
-//     for (const Ghost& ghost : ghosts) {
-//         UnloadTexture(ghost.texture);
-//     }
-//     for (const Coin& coin : coins) {
-//         UnloadTexture(coin.texture);
-//     }
-// }
+
         
 
 
@@ -315,6 +348,10 @@ void UpdateLevel2() {
         // Load sounds and music after initializing audio device
         collide = LoadSound("./Audio/ghostcollide.wav"); // Load collision sound
         music = LoadMusicStream("./Audio/sound.wav"); // Load music stream
+        coincollected = LoadSound("./Audio/chime-sound.mp3"); // Load coin collection sound
+        attack = LoadSound("./Audio/attack.mp3"); // Load attack sound
+        gameover = LoadSound("./Audio/gameover.wav"); // Load game over sound
+        win = LoadSound("./Audio/win.mp3"); // Load win sound
         PlayMusicStream(music); // Start playing music
 
         std::srand(static_cast<unsigned>(std::time(0))); // Seed random number generator
@@ -323,11 +360,13 @@ void UpdateLevel2() {
         current = &grid[0]; // Start from the first cell
 
         // Load player texture
-        player.texture = LoadTexture("./images/harry.png"); // Ensure this path is correct
+        player.texture = LoadTexture("./images/harry.png"); 
         hermione.texture = LoadTexture("./images/hermione.png");
+        blast.texture = LoadTexture("./images/blast.png");
+       
         hermione.r = numrows - 1; // Set Hermione's position to the last row
         hermione.c = ncols - 1; // Set Hermione's position to the last column
-       InitGhosts(); // Initialize ghosts
+        InitGhosts(); // Initialize ghosts
         InitCoins(); // Initialize coins
 
         initialized = true; // Set initialization flag to true
@@ -335,6 +374,9 @@ void UpdateLevel2() {
 
     if (!play) {
         MazeGenerator(); // Continue generating the maze until complete
+        // Update the music stream
+        UpdateMusicStream(music); // Ensure music plays smoothly
+
     } else {
         if (!gameOver && !gameWon) {
             UpdatePlayer(); // Update player position once the maze is generated
@@ -342,19 +384,24 @@ void UpdateLevel2() {
         }
     }
 
-    // Update the music stream
-    UpdateMusicStream(music); // Ensure music plays smoothly
-
     // Handle collision timing
     if (isColliding) {
         collisionTime -= GetFrameTime(); // Decrease the collision timer
-        if (collisionTime <= 0.0f) {
-            PlayMusicStream(music); // Resume music after the pause
+        if (collisionTime <= 0.2f) {
             isColliding = false; // Reset collision flag
         }
     }
-}
 
+    // Update blast display timer
+    if (blast.r >= 0 && blast.c >= 0) {
+        blastDisplayTime += GetFrameTime(); // Increment the timer
+        if (blastDisplayTime >= blastDuration) {
+            blast.r = -1; // Reset blast position
+            blast.c = -1;
+            blastDisplayTime = 0.0f; // Reset the timer
+        }
+    }
+}
 // DRAW level 2 function
 void DrawLevel2() {
     ClearBackground(RAYWHITE); // Clear the screen
@@ -367,5 +414,17 @@ void DrawLevel2() {
     std::string collectibleText = "Collectibles Remaining: " + std::to_string(CollectibleCount);
     DrawText(collectibleText.c_str(), 10, 10, 20, BLUE); // Adjust position and color as needed
 
-    
+    // If the game is won, display the "You Win!" message
+    if (gameWon) {
+       PlaySound(win);
+        
+    }
+
+    // If the game is over, display the "Game Over" message
+    if (gameOver) {
+        PlaySound(gameover); // Play game over sound
+        
+    }
 }
+
+        
